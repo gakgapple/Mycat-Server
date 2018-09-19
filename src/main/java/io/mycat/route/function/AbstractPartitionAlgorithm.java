@@ -98,5 +98,13 @@ public abstract class AbstractPartitionAlgorithm implements RuleAlgorithm ,Seria
 	public int getPartitionNum() {
 		return -1; // 表示没有限制
 	}
-	
+
+	/**
+	 * 返回分表数，返回null表示没有分表
+	 * @param colValue 分表字段
+	 * @return
+	 */
+	public Integer calculateTables(String colValue){
+		return null;
+	}
 }
