@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import com.alibaba.druid.util.JdbcConstants;
+import io.mycat.route.parser.druid.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,12 +59,6 @@ import io.mycat.route.impl.middlerResultStrategy.RouteMiddlerReaultHandler;
 import io.mycat.route.impl.middlerResultStrategy.SQLAllResultHandler;
 import io.mycat.route.impl.middlerResultStrategy.SQLExistsResultHandler;
 import io.mycat.route.impl.middlerResultStrategy.SQLQueryResultHandler;
-import io.mycat.route.parser.druid.DruidParser;
-import io.mycat.route.parser.druid.DruidParserFactory;
-import io.mycat.route.parser.druid.DruidShardingParseInfo;
-import io.mycat.route.parser.druid.MycatSchemaStatVisitor;
-import io.mycat.route.parser.druid.MycatStatementParser;
-import io.mycat.route.parser.druid.RouteCalculateUnit;
 import io.mycat.route.parser.util.ParseUtil;
 import io.mycat.route.util.RouterUtil;
 import io.mycat.server.NonBlockingSession;
@@ -93,10 +89,20 @@ public class DruidMycatRouteStrategy extends AbstractRouteStrategy {
 		 *  只有mysql时只支持mysql语法
 		 */
 		SQLStatementParser parser = null;
+
 		if (schema.isNeedSupportMultiDBType()) {
-			parser = new MycatStatementParser(stmt);
+			/**
+			 *  根据schema中的dataNodeDbType来获取具体的sql解析器
+			 */
+
+			if(schema.getDataNodeDbType().equals(JdbcConstants.POSTGRESQL)){
+				parser = new MycatPgsqlStatementParser(stmt);
+			}else{
+				parser = new MycatStatementParser(stmt);
+			}
+
 		} else {
-			parser = new MySqlStatementParser(stmt); 
+			parser = new MySqlStatementParser(stmt);
 		}
 
 		MycatSchemaStatVisitor visitor = null;

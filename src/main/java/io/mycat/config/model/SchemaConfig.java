@@ -48,6 +48,8 @@ public class SchemaConfig {
 	private final boolean checkSQLSchema;
 	private  boolean needSupportMultiDBType=false;
 	private  String defaultDataNodeDbType;
+	private  String dataNodeDbType;
+
 	/**
 	 * key is join relation ,A.ID=B.PARENT_ID value is Root Table ,if a->b*->c*
 	 * ,then A is root table
@@ -91,6 +93,28 @@ public class SchemaConfig {
 	public void setDefaultDataNodeDbType(String defaultDataNodeDbType)
 	{
 		this.defaultDataNodeDbType = defaultDataNodeDbType;
+	}
+
+	public String getDataNodeDbType()
+	{
+		return this.dataNodeDbType;
+	}
+
+	public void setDataNodeDbType(String dataNodeDbType)
+	{
+		this.dataNodeDbType = dataNodeDbType;
+	}
+
+	public void setDataNodeDbByTable(TableConfig tableConfig)
+	{
+		Set<String> dbTypes = tableConfig.getDbTypes();
+		for (String dbType : dbTypes) {
+			if (!"mysql".equalsIgnoreCase(dbType)) {
+				this.dataNodeDbType = dbType;
+				break;
+			}
+		}
+
 	}
 
 	public boolean isCheckSQLSchema() {
