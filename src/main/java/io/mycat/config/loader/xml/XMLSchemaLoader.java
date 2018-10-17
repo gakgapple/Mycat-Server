@@ -184,13 +184,18 @@ public class XMLSchemaLoader implements SchemaLoader {
             if (defaultDbType != null) {
                 schemaConfig.setDefaultDataNodeDbType(defaultDbType);
                 if (!"mysql".equalsIgnoreCase(defaultDbType)) {
+                    //增加数据库类型标注，方便后面sql解析获取相应语言的解析器
+                    schemaConfig.setDataNodeDbType(defaultDbType);
                     schemaConfig.setNeedSupportMultiDBType(true);
+
                 }
             }
 
             // 判断是否有不是mysql的数据库类型，方便解析判断是否启用多数据库分页语法解析
             for (TableConfig tableConfig : tables.values()) {
                 if (isHasMultiDbType(tableConfig)) {
+                    //增加数据库类型标注，方便后面sql解析获取相应语言的解析器
+                    schemaConfig.setDataNodeDbByTable(tableConfig);
                     schemaConfig.setNeedSupportMultiDBType(true);
                     break;
                 }
