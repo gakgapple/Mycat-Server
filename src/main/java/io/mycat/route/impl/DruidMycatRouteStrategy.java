@@ -90,6 +90,10 @@ public class DruidMycatRouteStrategy extends AbstractRouteStrategy {
 		 */
 		SQLStatementParser parser = null;
 
+
+
+
+
 		if (schema.isNeedSupportMultiDBType()) {
 			/**
 			 *  根据schema中的dataNodeDbType来获取具体的sql解析器

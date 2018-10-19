@@ -61,6 +61,7 @@ import io.mycat.route.RouteResultset;
 import io.mycat.route.RouteResultsetNode;
 import io.mycat.route.parser.druid.MycatSchemaStatVisitor;
 import io.mycat.route.parser.druid.RouteCalculateUnit;
+import io.mycat.route.parser.util.PageSQLUtil;
 import io.mycat.route.util.RouterUtil;
 import io.mycat.sqlengine.mpp.ColumnRoutePair;
 import io.mycat.sqlengine.mpp.HavingCols;
@@ -433,7 +434,14 @@ public class DruidSelectParser extends DefaultDruidParser {
 					SQLExprTableSource from2 = new SQLExprTableSource(sqlIdentifierExpr);
 					from2.setAlias(from.getAlias());
 					mysqlSelectQuery.setFrom(from2);
-					node.setStatement(stmt.toString());
+					//如果是既分库又分表的话，会把limit加上
+					if(schema.getAllDataNodes().size() > 1) {
+						String nativeSql = PageSQLUtil.convertLimitToNativePageSql(schema.getDataNodeDbType(), stmt.toString(), limitStart, limitSize);
+						node.setStatement(nativeSql);
+					}else{
+						//原来的逻辑，如果只是分表会把limit去掉，符合分表的逻辑
+						node.setStatement(stmt.toString());
+					}
 	            }
 			}
 			

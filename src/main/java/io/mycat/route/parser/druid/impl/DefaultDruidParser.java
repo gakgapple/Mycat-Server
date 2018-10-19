@@ -71,6 +71,11 @@ public class DefaultDruidParser implements DruidParser {
 		ctx.setSql(originSql);
 		//通过visitor解析
 		visitorParse(rrs,stmt,schemaStatVisitor);
+		//当pg批量更新的时候时候插入visitor，因为默认分片不支持PG类型的visitor
+		if(schema.getDataNodeDbType().equals("postgresql") && rrs.getSqlType()==11)
+		{
+			ctx.setVisitor(schemaStatVisitor);
+		}
 
 		//通过Statement解析
 		statementParse(schema, rrs, stmt);
