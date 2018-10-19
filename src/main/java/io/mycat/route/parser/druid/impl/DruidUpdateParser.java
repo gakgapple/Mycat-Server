@@ -1,6 +1,8 @@
 package io.mycat.route.parser.druid.impl;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLTableSource;
 import com.alibaba.druid.sql.ast.statement.SQLUpdateSetItem;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlUpdateStatement;
 import com.alibaba.druid.sql.ast.SQLExpr;
@@ -10,15 +12,21 @@ import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlSchemaStatVisitor;
 import com.alibaba.druid.stat.TableStat;
 import com.alibaba.druid.stat.TableStat.Name;
 
+import io.mycat.cache.LayerCachePool;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.config.model.TableConfig;
 import io.mycat.route.RouteResultset;
+import io.mycat.route.RouteResultsetNode;
+import io.mycat.route.parser.druid.MycatSchemaStatVisitor;
+import io.mycat.route.parser.druid.RouteCalculateUnit;
 import io.mycat.route.util.RouterUtil;
 import io.mycat.util.StringUtil;
 
 import java.sql.SQLNonTransientException;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 public class DruidUpdateParser extends DefaultDruidParser {
     @Override
@@ -231,4 +239,129 @@ public class DruidUpdateParser extends DefaultDruidParser {
             }
         }
     }
+
+    //因为mycat分片update只支持mysql所以重写visitorParse，覆盖成空方法，然后通过statementPparse去解析
+    @Override
+    public void visitorParse(RouteResultset rrs, SQLStatement stmt, MycatSchemaStatVisitor visitor) throws SQLNonTransientException {
+
+
+    }
+
+
+
+    /**
+     * 改写sql：为分库分表改写sql然后直接返回路由，如果不是分库分表，则回到原来逻辑上去
+     */
+    @Override
+    public void changeSql(SchemaConfig schema, RouteResultset rrs, SQLStatement stmt, LayerCachePool cachePool) throws SQLNonTransientException {
+
+
+        MySqlUpdateStatement update = (MySqlUpdateStatement) stmt;
+        String tableName = StringUtil.removeBackquote(update.getTableName().getSimpleName().toUpperCase());
+
+        TableConfig tc = schema.getTables().get(tableName);
+
+        if (RouterUtil.isNoSharding(schema, tableName)) {//整个schema都不分库或者该表不拆分
+            RouterUtil.routeForTableMeta(rrs, schema, tableName, rrs.getStatement());
+            rrs.setFinishedRoute(true);
+            return;
+        }
+
+        String partitionColumn = tc.getPartitionColumn();
+
+        String joinKey = tc.getJoinKey();
+        if (tc.isGlobalTable() || (partitionColumn == null && joinKey == null)) {
+            //修改全局表 update 受影响的行数
+            RouterUtil.routeToMultiNode(false, rrs, tc.getDataNodes(), rrs.getStatement(), tc.isGlobalTable());
+            rrs.setFinishedRoute(true);
+            return;
+        }
+
+
+        SQLBinaryOpExpr where = (SQLBinaryOpExpr) update.getWhere();
+
+        String shardingValue =  this.getValue(where.getLeft(), where.getRight(), partitionColumn);
+
+        RouteCalculateUnit routeCalculateUnit = new RouteCalculateUnit();
+        routeCalculateUnit.addShardingExpr(tableName, partitionColumn, shardingValue);
+        ctx.addRouteCalculateUnit(routeCalculateUnit);
+        ctx.addTable(tableName);
+        SortedSet<RouteResultsetNode> nodeSet = new TreeSet<RouteResultsetNode>();
+        boolean isAllGlobalTable = RouterUtil.isAllGlobalTable(ctx, schema);
+        for (RouteCalculateUnit unit : ctx.getRouteCalculateUnits()) {
+            RouteResultset rrsTmp = RouterUtil.tryRouteForTables(schema, ctx, unit, rrs, true, cachePool);
+            if (rrsTmp != null&&rrsTmp.getNodes()!=null) {
+                for (RouteResultsetNode node : rrsTmp.getNodes()) {
+                    nodeSet.add(node);
+                }
+            }
+            if(isAllGlobalTable) {//都是全局表时只计算一遍路由
+                break;
+            }
+        }
+        SQLTableSource from = update.getTableSource();
+        for (RouteResultsetNode node : rrs.getNodes()) {
+            SQLIdentifierExpr sqlIdentifierExpr = new SQLIdentifierExpr();
+            sqlIdentifierExpr.setParent(from);
+            sqlIdentifierExpr.setName(node.getSubTableName());
+            SQLExprTableSource from2 = new SQLExprTableSource(sqlIdentifierExpr);
+            //更新表名
+            update.setTableSource(from2);
+
+            if(schema.getAllDataNodes().size() > 1) {
+
+                node.setStatement(stmt.toString());
+            }
+
+        }
+
+    }
+
+    /**
+     * 获取分片值
+     * @param left
+     * @param right
+     * @param value
+     * @return
+     */
+    public String getValue(SQLExpr left , SQLExpr right , String value) {
+
+        String  shardingValue = "";
+        if(left instanceof  SQLBinaryOpExpr && right instanceof  SQLBinaryOpExpr)
+        {
+            SQLBinaryOpExpr leftNow = (SQLBinaryOpExpr) left;
+
+            SQLBinaryOpExpr rightNow = (SQLBinaryOpExpr) right;
+
+            SQLIdentifierExpr leftInRight = (SQLIdentifierExpr) rightNow.getLeft();
+            String leftValue = leftInRight.getName().toUpperCase();
+            if(leftValue.equals(value))
+            {
+
+                return  rightNow.getRight().toString();
+            }
+            else{
+                shardingValue =  this.getValue(leftNow.getLeft(),leftNow.getRight(),value);
+            }
+        }
+        if(left instanceof  SQLIdentifierExpr )
+        {
+
+
+            String leftValue = ((SQLIdentifierExpr) left).getName().toUpperCase();
+            if(leftValue.equals(value))
+            {
+
+                return right.toString();
+            }
+            else
+            {
+                return "";
+            }
+
+        }
+        return shardingValue;
+
+    }
+
 }
