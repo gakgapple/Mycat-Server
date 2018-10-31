@@ -16,7 +16,7 @@
 		<!-- <table name="dual" primaryKey="ID" dataNode="dnx,dnoracle2" type="global"
 			needAddLimit="false"/> <table name="worker" primaryKey="ID" dataNode="jdbc_dn1,jdbc_dn2,jdbc_dn3"
 			rule="mod-long" /> -->
-		<table name="employee" primaryKey="ID" dataNode="dn1,dn2"
+		<table name="employee" primaryKey="ID" dataNode="dn1,dn21"
 			   rule="sharding-by-intfile" />
 		<table name="customer" primaryKey="ID" dataNode="dn1,dn2"
 			   rule="sharding-by-intfile">
