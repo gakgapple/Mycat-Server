@@ -23,7 +23,7 @@ public class ProcedureParameter implements Serializable
     private int jdbcType= Types.VARCHAR;
 
 
-    
+
 
     private Object value;
 
