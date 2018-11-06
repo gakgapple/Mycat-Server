@@ -22,6 +22,9 @@ public class ProcedureParameter implements Serializable
     //java.sql.Types
     private int jdbcType= Types.VARCHAR;
 
+
+
+
     private Object value;
 
 

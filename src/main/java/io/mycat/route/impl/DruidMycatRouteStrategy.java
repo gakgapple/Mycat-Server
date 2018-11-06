@@ -2,17 +2,15 @@ package io.mycat.route.impl;
 
 import java.sql.SQLNonTransientException;
 import java.sql.SQLSyntaxErrorException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlUpdateStatement;
 import com.alibaba.druid.util.JdbcConstants;
 import io.mycat.route.parser.druid.*;
+import io.mycat.route.parser.util.PageSQLUtil;
+import io.mycat.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -237,6 +235,120 @@ public class DruidMycatRouteStrategy extends AbstractRouteStrategy {
 				throw new SQLSyntaxErrorException(err);
 			}
 		}
+
+		//在这里处理虚拟关键列的问题
+
+		String tableName = tables.get(0);
+		TableConfig tc = schema.getTables().get(tableName);
+		String partitionColumn = tc.getPartitionColumn().toLowerCase();
+		if (partitionColumn.matches("^_\\w*")) {
+			//sql替换的时候insert
+			if (statement instanceof MySqlInsertStatement) {
+				//首先判断是批量添加还是单个添加
+				//如果是单个添加就一个一个替换
+
+				for (RouteResultsetNode node : rrs.getNodes()) {
+
+					Pattern insertPattern = Pattern.compile("\\([',\"]*\\w+[',\"]*,?\\s*[^\\)]*\\)");
+
+					String a = node.getStatement().toLowerCase().replaceAll("\n|\t", "").trim();
+					Matcher m = insertPattern.matcher(a);
+
+					/*while (m.find()) {
+						//用逗号将字符串分开，得到字符串数组
+						StringBuilder sqlContent = new StringBuilder();
+
+						String insertSql = m.group(0);
+						System.out.println(insertSql);
+
+					}*/
+					Integer start = 0;
+					Integer key = 0;
+					StringBuilder newInsertSql = new StringBuilder();
+					String frontSql = "insert into " + tableName;
+					String midSql = ")values(";
+					String backSql = ";";
+					String leftBracket = "(";
+					String rightBracket = ")";
+					StringBuilder tableColumn = new StringBuilder();
+
+					while (m.find()) {
+						//用逗号将字符串分开，得到字符串数组
+						StringBuilder sqlContent = new StringBuilder();
+
+						String insertSql = m.group(0);
+						insertSql = insertSql.replaceAll("\\(|\\)|\n|\t", "");
+
+						String[] strs = insertSql.split(",");
+						//判断是否是values之前的语句
+						if (start.equals(0)) {
+							for (int i = 0; i < strs.length; i++) {
+								String columnKey = strs[i].trim();
+								//如果是虚的关键列，跳过，然后给key赋值，用于values之后的sql去掉对应的值
+								if (columnKey.equalsIgnoreCase(partitionColumn)) {
+									key = i;
+									continue;
+								}
+								if (!tableColumn.toString().equals("")) {
+									tableColumn.append("," + strs[i]);
+								} else {
+									tableColumn.append(strs[i]);
+								}
+
+							}
+							//values之前sql
+							newInsertSql.append(frontSql);
+
+							start++;
+						} else {
+							if (start > 1) {
+								//如果是多条插入，分解成为多个insert执行
+								newInsertSql.append(backSql);
+								newInsertSql.append(frontSql);
+
+							}
+							for (int i = 0; i < strs.length; i++) {
+
+								//如果对应值为虚拟关键列的值，用户子表的确认。并不加入到执行的sql中。
+								if (key == i) {
+
+									newInsertSql.append("_" + strs[i].trim().replace("'", ""));
+									newInsertSql.append(leftBracket);
+									newInsertSql.append(tableColumn.toString());
+									newInsertSql.append(midSql);
+									continue;
+								}
+								if (!sqlContent.toString().equals("")) {
+									sqlContent.append("," + strs[i]);
+								} else {
+									sqlContent.append(strs[i]);
+								}
+							}
+							newInsertSql.append(sqlContent.toString());
+							newInsertSql.append(rightBracket);
+							start++;
+						}
+						System.out.println(newInsertSql.toString());
+						node.setStatement(newInsertSql.toString());
+					}
+				}
+
+			} else {
+
+
+				for (RouteResultsetNode node : rrs.getNodes()) {
+
+					String a = node.getStatement().toLowerCase();
+					a = a.replaceAll("\\s*" + partitionColumn + "\\s*=\\s*\\d*", " 1=1 ");
+					node.setStatement(a);
+				}
+
+
+			}
+		}
+
+
+
 		return rrsResult;
 	}
 	
