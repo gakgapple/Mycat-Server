@@ -1,6 +1,7 @@
 package io.mycat.route.parser.druid.impl;
 
 import java.sql.SQLNonTransientException;
+import java.sql.SQLSyntaxErrorException;
 
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLStatement;
@@ -50,43 +51,43 @@ public class DruidDeleteParser extends DefaultDruidParser {
 	 * @param value
 	 * @return
 	 */
-	public String getValue(SQLExpr left , SQLExpr right , String value) {
+	public String getValue(SQLExpr left , SQLExpr right , String value) throws SQLSyntaxErrorException {
 
-		String  shardingValue = "";
-		if(left instanceof  SQLBinaryOpExpr && right instanceof  SQLBinaryOpExpr)
-		{
-			SQLBinaryOpExpr leftNow = (SQLBinaryOpExpr) left;
+		//先分析right 如果right不包含 分区列，则递归left
 
+		//而且分区列一定是SQLBinaryOpExpr 所以 SQLInList这种的都不考虑进去
+
+		if (right instanceof SQLBinaryOpExpr) {
+			//获取right
 			SQLBinaryOpExpr rightNow = (SQLBinaryOpExpr) right;
-
+			//获取获取key
 			SQLIdentifierExpr leftInRight = (SQLIdentifierExpr) rightNow.getLeft();
-			String leftValue = leftInRight.getName().toUpperCase();
-			if(leftValue.equals(value))
-			{
-
-				return  rightNow.getRight().toString();
+			String rightValue = ((SQLIdentifierExpr) leftInRight).getName().toUpperCase();
+			//如果key=关键列则返回key对应的value
+			if (rightValue.equals(value)) {
+				return rightNow.getRight().toString();
 			}
-			else{
-				shardingValue =  this.getValue(leftNow.getLeft(),leftNow.getRight(),value);
-			}
-		}
-		if(left instanceof  SQLIdentifierExpr )
-		{
-
+			//再去查下left是否符合条件，符合条件的话直接返回。
+		} else if (left instanceof SQLIdentifierExpr) {
 
 			String leftValue = ((SQLIdentifierExpr) left).getName().toUpperCase();
-			if(leftValue.equals(value))
-			{
+			if (leftValue.equals(value)) {
 
 				return right.toString();
-			}
-			else
-			{
+			} else {
 				return "";
 			}
 
 		}
-		return shardingValue;
+
+		if (left instanceof SQLBinaryOpExpr) {
+			SQLBinaryOpExpr leftNow = (SQLBinaryOpExpr) left;
+			return this.getValue(leftNow.getLeft(), leftNow.getRight(), value);
+		} else {
+			String msg = "分区列格式不正确 ";
+			LOGGER.warn(msg);
+			throw new SQLSyntaxErrorException(msg);
+		}
 
 	}
 
