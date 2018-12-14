@@ -31,6 +31,8 @@ import io.mycat.server.ServerConnection;
 import io.mycat.server.parser.ServerParse;
 
 public class JDBCConnection implements BackendConnection {
+	public long useCount = 0;
+
 	protected static final Logger LOGGER = LoggerFactory
 			.getLogger(JDBCConnection.class);
 	private JDBCDatasource pool;
