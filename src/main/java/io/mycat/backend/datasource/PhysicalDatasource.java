@@ -23,6 +23,7 @@
  */
 package io.mycat.backend.datasource;
 
+import io.mycat.backend.jdbc.JDBCConnection;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -53,6 +54,8 @@ import io.mycat.util.TimeUtil;
 public abstract class PhysicalDatasource {
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger(PhysicalDatasource.class);
+	//每次连接被获取使用的次数限制
+	private long phyMaxUseCount = 10000;
 
 	private final String name;
 	private final int size;
@@ -498,6 +501,19 @@ public abstract class PhysicalDatasource {
 		
 		// 从当前连接map中拿取已建立好的后端连接
 		BackendConnection con = this.conMap.tryTakeCon(schema, autocommit);
+
+		if (con instanceof JDBCConnection) {
+			JDBCConnection connection = (JDBCConnection)con;
+
+			if (phyMaxUseCount > 0 && connection.useCount >= phyMaxUseCount) {
+				LOGGER.info("超过使用次数，释放并重建");
+				connection.close("超过使用次数，释放并重建");
+				con = this.conMap.tryTakeCon(schema, autocommit);
+			}else{
+				connection.useCount++;
+			}
+		}
+
 		if (con != null) {
 			//如果不为空，则绑定对应前端请求的handler
 			takeCon(con, handler, attachment, schema);
